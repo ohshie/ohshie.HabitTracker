@@ -1,4 +1,6 @@
-﻿using Microsoft.Data.Sqlite;
+﻿using System.Globalization;
+using System.Text.RegularExpressions;
+using ohshie.HabitTracker;
 
 class Program
 {
@@ -6,83 +8,48 @@ class Program
 
     public static void Main(string[] args)
     {
-        CreateDb();
-        Menu();
+        Menus menu = new Menus();
+        menu.MainMenu();
     }
-
-    static void CreateDb()
+    
+    public static string DateChooser()
     {
-        using (var connection = new SqliteConnection(Dbconnection))
+        string date = "";
+        bool goBack = false;
+        while (goBack == false)
         {
-            connection.Open();
-            var tableCommand = connection.CreateCommand();
-            
-            tableCommand.CommandText = 
-                @"CREATE TABLE IF NOT EXISTS book_reading (Id INTEGER PRIMARY KEY AUTOINCREMENT,Date TEXT,Quantity INTEGER)";
-
-            tableCommand.ExecuteNonQuery();
-            
-            connection.Close();
-        }
-    }
-
-    static void Menu()
-    {
-        bool appExit = false;
-        do
-        {
-            Console.WriteLine("Vitamin intake habit tracker.\n" +
-                              "Main Menu.\n" +
-                              "Press 1 to add new entry\n" +
-                              "Press 2 to see all entries\n" +
-                              "Press 3 to change previous entries\n" +
-                              "Press X to exit");
-            ConsoleKey userInput = Console.ReadKey(true).Key;
-
-            switch (userInput)
+            Console.Clear();
+            Console.WriteLine("Choose how to enter date of entry\n" +
+                              $"Press 1 to enter date automatically ({DateTime.Today.Date.ToShortDateString()})\n" +
+                              $"Press 2 to choose date manually\n" +
+                              "Press X to go back");
+            ConsoleKey consoleKey = Console.ReadKey(true).Key;
+            switch (consoleKey)
             {
-                case ConsoleKey.D1:
-                    AddEntry();
-                    break;
+                case ConsoleKey.D1: 
+                    return GetDateOfEntryAuto();
                 case ConsoleKey.D2:
-                    PrintDb();
-                    break;
-                case ConsoleKey.D3:
-                    DatabaseMenu();
-                    break;
-                case ConsoleKey.X: 
-                    appExit = true;
+                    return GetDateOfEntryManually();
+                case ConsoleKey.X:
+                    goBack = true;
+                    date = "X";
                     break;
                 default:
-                    Console.WriteLine("Invalid choice, try again.");
+                {
+                    Console.WriteLine("INVALID CHOICE, try again.\n" +
+                                      "press enter to try again");
+                    Console.ReadLine();
+                    Console.Clear();
                     break;
+                }
             }
-            
-        } while (appExit == false);
+        }
+
+        Console.Clear();
+        return date;
     }
 
-    private static void AddEntry()
-    {
-        string date = GetDateOfEntry();
-
-        int pages = GetNumberFromUser("amount of pages read");
-        if (pages == -1)
-        {
-            return;
-        }
-        using (var connection = new SqliteConnection(Dbconnection))
-        {
-            connection.Open();
-            var tableCommand = connection.CreateCommand();
-            tableCommand.CommandText = $"INSERT into book_reading(date, quantity) values ('{date}', {pages})";
-
-            tableCommand.ExecuteNonQuery();
-            
-            connection.Close();
-        }
-    }
-
-    private static string GetDateOfEntry()
+    private static string GetDateOfEntryAuto()
     {
         DateTime dateTime = DateTime.Today.Date;
 
@@ -91,122 +58,58 @@ class Program
         return currentDate;
     }
 
-    private static int GetNumberFromUser(string message)
+    private static string GetDateOfEntryManually()
+    {
+        Console.WriteLine("Input date of entry (format: dd.mm.yyyy) or enter X to go back");
+
+        while (true)
+        {
+            string date = Console.ReadLine().ToUpperInvariant();
+            if (date == "X") return date;
+
+            if (DateTime.TryParseExact(date, "dd.MM.yyyy", CultureInfo.InvariantCulture,
+                    DateTimeStyles.None, out DateTime cleanDate) && cleanDate <= DateTime.Today)
+            {
+                return cleanDate.ToShortDateString();
+            }
+            Console.WriteLine("Looks like date your entered is wrong or you entered something that is not X. Try again");
+        }
+    }
+
+    public static int GetNumberFromUser(string message)
     {
         
         int inputCleared;
         Console.WriteLine($"Enter {message}, or X to go back.\n" +
                           "remember, no decimals allowed!");
         string userInput = Console.ReadLine().ToUpperInvariant();
-        while (!int.TryParse(userInput, out inputCleared))
+        while (!int.TryParse(userInput, out inputCleared) || Convert.ToInt32(userInput) <= 0)
         {
-            if (userInput == "X")
-            {
-                return -1;
-            }
+            if (userInput == "X") return -1;
+            
             Console.WriteLine("Looks like you entered something that is not a number or not X. Try again");
-            userInput = Console.ReadLine();
+            userInput = Console.ReadLine().ToUpperInvariant();
         }
 
         return inputCleared;
     }
-
-    private static void PrintDb()
-    {
-        Console.Clear();
-        
-        using (var connection = new SqliteConnection(Dbconnection))
-        {
-            connection.Open();
-            var tableCommand = connection.CreateCommand();
-
-            tableCommand.CommandText = $"select * from book_reading";
-
-            List<BookReading> bookReadingsData = new List<BookReading>();
-
-            SqliteDataReader reader = tableCommand.ExecuteReader();
-
-            if (reader.HasRows)
-            {
-                while (reader.Read())
-                {
-                    bookReadingsData.Add(
-                        new BookReading
-                        {
-                            Id = reader.GetInt32(0),
-                            Date = reader.GetString(1),
-                            Quantity = reader.GetInt32(2)
-                        });;
-                }
-            }
-            
-            connection.Close();
-
-            foreach (var entry in bookReadingsData)
-            {
-                Console.WriteLine($"{entry.Id}. On {entry.Date}. You've read {entry.Quantity} pages");
-            }
-        }
-    }
-
-    private static void DatabaseMenu()
-    {
-        bool menuExit = false;
-        
-        while (menuExit == false)
-        {
-            Console.Clear();
-            Console.WriteLine("Database operations:\n" +
-                              "press:" +
-                              "1 to Delete entries\n" +
-                              "X to Go back");
-            ConsoleKey userInput = Console.ReadKey(true).Key;
-
-            switch (userInput)
-            {
-                case ConsoleKey.D1:
-                    DeleteEntry();
-                    continue;
-                case ConsoleKey.X:
-                    menuExit = true;
-                    break;
-                default:
-                {
-                    Console.WriteLine("Invalid choice, press enter to try again.");
-                    Console.ReadLine();
-                    continue;
-                }
-            }
-        }
-    }
     
-    private static void DeleteEntry()
+    public static string GetStringFromUser(string message)
     {
-        Console.Clear();
-        PrintDb();
-        using (var connection = new SqliteConnection(Dbconnection))
+        string regexSafetyCheck = @"[^a-zA-Z0-9]+";
+        
+        Console.WriteLine($"Enter {message}, or 0 to go back.\n" +
+                          "Name should be more than 1 character in length, without spaces or any symbols like #$%");
+        string userInput = Console.ReadLine();
+        
+        while (userInput == "0" | Regex.IsMatch(userInput,regexSafetyCheck) | userInput.Length < 1)
         {
-            connection.Open();
-            var tableCommand = connection.CreateCommand();
+            if (userInput == "0") return "#";
             
-                int entryId = GetNumberFromUser("Id of entry you want to delete");
-                if (entryId == -1)
-                {
-                    return;
-                }
-                
-                tableCommand.CommandText = $"delete from book_reading where id = '{entryId}'";
-
-                int invalidRow = tableCommand.ExecuteNonQuery();
-                
-                Console.WriteLine($"Entry with Id {entryId} was deleted");
+            Console.WriteLine("Looks like you entered something that is not allowed or not X. Try again");
+            userInput = Console.ReadLine();
         }
-    }
 
-    class BookReading
-    {
-        public int Id { get; set; }
-        public string Date { get; set; }
-        public int Quantity { get; set; }
+        return userInput;
     }
 }
